@@ -55,3 +55,13 @@ jobs:
         with:
           path: last_schedule.txt
           key: padel-data-${{ github.run_id }}
+
+            # 4. CLEAN UP OLD CACHES
+      - name: Cleanup Old Cache
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # List all caches with our prefix, exclude the current run's key, and delete them
+          gh cache list --key "padel-data-" --limit 100 --json key,id | \
+          jq -r '.[] | select(.key != "padel-data-${{ github.run_id }}") | .id' | \
+          xargs -I {} gh cache delete {} || echo "No old caches to delete."
