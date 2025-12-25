@@ -56,6 +56,7 @@ public class PadelScraper {
 
         if (fullReport.length() > 0) {
             scraper.sendPushNotification(fullReport.toString());
+            System.out.println(fullReport.toString());
             System.out.println("✅ Report sent to ntfy.");
         } else {
             System.out.println("📭 No availability found.");
@@ -127,6 +128,11 @@ public class PadelScraper {
             String resourceId = resource.get("resource_id").asText();
             String type = courtTypeMap.getOrDefault(resourceId, "Doubles");
 
+            // --- IGNORE SINGLES HERE ---
+            if ("Singles".equals(type)) {
+                continue;
+            }
+
             JsonNode slots = resource.get("slots");
             if (slots != null && slots.isArray()) {
                 for (JsonNode slot : slots) {
@@ -144,9 +150,9 @@ public class PadelScraper {
         if (doublesTable.length() > 0) {
             output.append("👥 **Doubles**\n```\nTime  | Dur | Price\n").append(doublesTable).append("```\n");
         }
-        if (singlesTable.length() > 0) {
-            output.append("👤 **Singles**\n```\nTime  | Dur | Price\n").append(singlesTable).append("```\n");
-        }
+//        if (singlesTable.length() > 0) {
+//            output.append("👤 **Singles**\n```\nTime  | Dur | Price\n").append(singlesTable).append("```\n");
+//        }
         return output.toString();
     }
 

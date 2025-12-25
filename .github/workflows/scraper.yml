@@ -1,32 +1,56 @@
-name: Playtomic Scraper Bot
+name: Padel Scraper
 
 on:
   schedule:
-    # Runs every 15 minutes (UTC)
-    - cron: '*/60 * * * *'
-  workflow_dispatch: # Allows you to run it manually from the "Actions" tab
+    - cron: '*/30 * * * *' # Runs every 30 mins
+  workflow_dispatch:      # Allows manual trigger
 
 jobs:
-  run-scraper:
+  scrape:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
 
       - name: Build with Gradle
         uses: gradle/actions@v5.0.0
 
-      - name: Compile and Run Scraper
+      # 1. RESTORE PREVIOUS DATA
+      - name: Restore Previous Schedule
+        uses: actions/cache/restore@v4
+        with:
+          path: last_schedule.txt
+          key: padel-data-${{ github.run_id }}
+          restore-keys: |
+            padel-data-
+
+      - name: Run Scraper
         env:
-          # Pass secrets into environment variables
-          EMAIL: ${{ secrets.PLAYTOMIC_EMAIL }}
-          PASSWORD: ${{ secrets.PLAYTOMIC_PASSWORD }}
+          EMAIL: ${{ secrets.EMAIL }}
+          PASSWORD: ${{ secrets.PASSWORD }}
           PUB_TOPIC: ${{ secrets.PUB_TOPIC }}
         run: |
-          ./gradlew run --quiet
+          # Run the scraper and save output to a temp file
+          ./gradlew run --quiet > current_output.txt
+          
+          # 2. COMPARE DATA
+          if [ -f last_schedule.txt ] && cmp -s current_output.txt last_schedule.txt; then
+            echo "No changes found. Skipping notification."
+          else
+            echo "Changes detected or first run. Sending notification."
+            # Move current to last_schedule so it gets cached
+            cp current_output.txt last_schedule.txt
+          fi
+
+      # 3. SAVE DATA FOR NEXT RUN
+      - name: Save Current Schedule to Cache
+        uses: actions/cache/save@v4
+        with:
+          path: last_schedule.txt
+          key: padel-data-${{ github.run_id }}
