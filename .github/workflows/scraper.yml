@@ -24,5 +24,6 @@ jobs:
           # Pass secrets into environment variables
           EMAIL: ${{ secrets.PLAYTOMIC_EMAIL }}
           PASSWORD: ${{ secrets.PLAYTOMIC_PASSWORD }}
+          PUB_TOPIC: ${{ secrets.PUB_TOPIC }}
         run: |
           java src/main/java/org/stac/PadelScraper.java

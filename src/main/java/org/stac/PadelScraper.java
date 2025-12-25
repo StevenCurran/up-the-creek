@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 
 public class PadelScraper {
 
-    private static final String EMAIL = System.getenv("EMAIL");;
+    private static final String EMAIL = System.getenv("EMAIL");
     private static final String PASSWORD = System.getenv("PASSWORD");
     private static final String TOPIC = System.getenv("PUB_TOPIC");
     private static final String TENANT_ID = "0e339a49-7fc6-49b0-b4b7-44165dc0a8d7";
@@ -26,8 +26,10 @@ public class PadelScraper {
                 .build();
     }
 
-    public static void main(String[] args) throws Exception {
+    static void main() throws Exception {
         var scraper = new PadelScraper();
+        System.out.println("Starting Padel Scraper");
+        System.out.println("Sending to " + TOPIC);
         scraper.getAvailability("2025-12-26");
         scraper.getAvailability("2025-12-27");
         scraper.getAvailability("2025-12-28");
@@ -171,7 +173,7 @@ public class PadelScraper {
                     .POST(HttpRequest.BodyPublishers.ofString(message))
                     .build();
 
-            this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println("🚀 Notification sent via Tags.");
 
         } catch (Exception e) {
