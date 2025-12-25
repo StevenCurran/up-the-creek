@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
 public class PadelScraper {
 
     private static final String EMAIL = System.getenv("EMAIL");;
-    private static final String PASSWORD = System.getenv("PASSWORD");;
+    private static final String PASSWORD = System.getenv("PASSWORD");
+    private static final String TOPIC = System.getenv("PUB_TOPIC");
     private static final String TENANT_ID = "0e339a49-7fc6-49b0-b4b7-44165dc0a8d7";
 
     private final HttpClient httpClient;
@@ -142,6 +143,9 @@ public class PadelScraper {
 
                 System.out.printf("  🕒 %s (%s min) - %s\n", startTime, duration, price);
                 found = true;
+
+                String alert = String.format("Court available at %s for %s min (%s)", startTime, duration, price);
+                sendPushNotification(alert);
             }
 
             if (!found) System.out.println("  (No slots available)");
@@ -153,4 +157,28 @@ public class PadelScraper {
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1) : null;
     }
+
+    /**
+     * Sends a push notification to your iPhone via ntfy.sh
+     */
+    public void sendPushNotification(String message) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://ntfy.sh/" + TOPIC))
+                    .header("Title", "Padel Court Found! 🎾")
+                    .header("Priority", "high") // Makes it bypass "Do Not Disturb" on some settings
+                    .header("Tags", "racquet,star2") // Adds emojis to the alert
+                    .POST(HttpRequest.BodyPublishers.ofString(message))
+                    .build();
+
+            // Use the same httpClient you defined in the constructor
+            this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("🚀 Notification sent to ntfy.sh/" + TOPIC);
+
+        } catch (Exception e) {
+            System.err.println("Failed to send notification: " + e.getMessage());
+        }
+    }
+
+
 }
