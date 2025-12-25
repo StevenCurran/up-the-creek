@@ -21,7 +21,9 @@ public class PadelScraper {
 
     private final HttpClient httpClient;
     private final ObjectMapper mapper = new ObjectMapper();
-    private final Map<String, String> courtTypeCache = new HashMap<>();
+
+    // Maps Resource ID to a readable Type (Singles/Doubles)
+    private final Map<String, String> courtTypeMap = new HashMap<>();
 
     private String accessToken;
     private String refreshToken;
@@ -37,6 +39,10 @@ public class PadelScraper {
         var scraper = new PadelScraper();
         System.out.println("🚀 Starting Padel Scraper for Padel54");
 
+        // 1. Log in and build the court map first
+        scraper.login();
+        scraper.fetchCourtMetadata();
+
         StringBuilder fullReport = new StringBuilder();
         String[] dates = {"2025-12-26", "2025-12-27", "2025-12-28"};
 
@@ -48,16 +54,48 @@ public class PadelScraper {
             }
         }
 
-        if (!fullReport.isEmpty()) {
+        if (fullReport.length() > 0) {
             scraper.sendPushNotification(fullReport.toString());
+            System.out.println("✅ Report sent to ntfy.");
         } else {
             System.out.println("📭 No availability found.");
         }
     }
 
-    public String getAvailabilityReport(String date) throws Exception {
-        if (accessToken == null) login();
+    /**
+     * Calls the Tenant endpoint to map Resource IDs to Singles/Doubles
+     */
+    public void fetchCourtMetadata() throws Exception {
+        System.out.println("🔍 Fetching court metadata...");
+        String url = "https://api.playtomic.io/v1/tenants/" + TENANT_ID;
 
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + accessToken)
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            JsonNode root = mapper.readTree(response.body());
+            JsonNode resources = root.get("resources");
+
+            for (JsonNode res : resources) {
+                String id = res.get("resource_id").asText();
+                // Check properties -> resource_size
+                String size = res.path("properties").path("resource_size").asText("double");
+
+                String type = size.equalsIgnoreCase("single") ? "Singles" : "Doubles";
+                courtTypeMap.put(id, type);
+            }
+            System.out.println("✅ Mapped " + courtTypeMap.size() + " courts.");
+        } else {
+            System.err.println("❌ Failed to fetch metadata: " + response.statusCode());
+        }
+    }
+
+    public String getAvailabilityReport(String date) throws Exception {
         String url = String.format("https://api.playtomic.io/v1/availability?sport_id=PADEL" +
                 "&start_max=%sT23:59:59&start_min=%sT00:00:00" +
                 "&tenant_id=%s&user_id=me", date, date, TENANT_ID);
@@ -87,7 +125,7 @@ public class PadelScraper {
 
         for (JsonNode resource : root) {
             String resourceId = resource.get("resource_id").asText();
-            String type = getCachedCourtType(resourceId);
+            String type = courtTypeMap.getOrDefault(resourceId, "Doubles");
 
             JsonNode slots = resource.get("slots");
             if (slots != null && slots.isArray()) {
@@ -119,31 +157,7 @@ public class PadelScraper {
         return String.format("%-5s | %-3s | %s\n", time, dur, price);
     }
 
-    private String getCachedCourtType(String resourceId) throws Exception {
-        if (courtTypeCache.containsKey(resourceId)) return courtTypeCache.get(resourceId);
-
-        String url = String.format("https://api.playtomic.io/v1/tenants/%s/resources/%s", TENANT_ID, resourceId);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + accessToken)
-                .header("User-Agent", "iOS 26.2")
-                .GET()
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        String type = "Doubles"; // Default
-
-        if (response.statusCode() == 200) {
-            JsonNode node = mapper.readTree(response.body());
-            int size = node.path("properties").path("size").asInt();
-            if (size == 2) type = "Singles";
-        }
-
-        courtTypeCache.put(resourceId, type);
-        return type;
-    }
-
-    // --- Auth Logic (Updated for Jackson) ---
+    // --- Auth Logic ---
 
     public void login() throws Exception {
         String payload = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", EMAIL, PASSWORD);
@@ -159,6 +173,7 @@ public class PadelScraper {
             JsonNode node = mapper.readTree(response.body());
             this.accessToken = node.get("access_token").asText();
             this.refreshToken = node.get("refresh_token").asText();
+            System.out.println("🔑 Login successful.");
         } else {
             throw new RuntimeException("Login failed: " + response.statusCode());
         }
@@ -185,7 +200,7 @@ public class PadelScraper {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://ntfy.sh/" + TOPIC))
-                    .header("Title", "Padel Availability")
+                    .header("Title", "Padel54 Availability")
                     .header("Priority", "4")
                     .header("Tags", "racquet,calendar")
                     .header("Markdown", "yes")

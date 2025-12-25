@@ -1,5 +1,9 @@
 package org.stac;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,6 +18,8 @@ public class PlaytomicAppScraper2025 {
     private static final String PASSWORD = "Flatness-Margarine-Rural-Reanalyze5";
     private static final String TENANT_ID = "0e339a49-7fc6-49b0-b4b7-44165dc0a8d7";
 
+    private final ObjectMapper mapper = new ObjectMapper();
+
     private final HttpClient httpClient;
     private String accessToken;
     private String refreshToken;
@@ -27,6 +33,8 @@ public class PlaytomicAppScraper2025 {
 
     public static void main(String[] args) throws Exception {
         var scraper = new PlaytomicAppScraper2025();
+        scraper.login();
+        scraper.fetchCourtMetadata();
         scraper.getAvailability("2025-12-26");
         scraper.getAvailability("2025-12-27");
         scraper.getAvailability("2025-12-28");
@@ -117,35 +125,50 @@ public class PlaytomicAppScraper2025 {
         }
     }
 
-    public String getCourtType(String resourceId) throws Exception {
-        String url = String.format("https://api.playtomic.io/v1/tenants/%s/resources/%s", TENANT_ID, resourceId);
+    /**
+     * Calls the Tenant endpoint to map Resource IDs to Singles/Doubles
+     */
+    public void fetchCourtMetadata() throws Exception {
+        System.out.println("🔍 Fetching court metadata...");
+        String url = "https://api.playtomic.io/v1/tenants/" + TENANT_ID;
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + accessToken)
-                .header("User-Agent", "iOS 26.2")
                 .GET()
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
-            String body = response.body();
-            // Look for the "size" property: "2" for Singles, "4" for Doubles
-            if (body.contains("\"size\":2")) return "Singles";
-            if (body.contains("\"size\":4")) return "Doubles";
+            JsonNode root = mapper.readTree(response.body());
+            JsonNode resources = root.get("resources");
 
-            // Alternative: Some clubs put it in the "name"
-            return getValueFromJson(body, "name");
+            for (JsonNode res : resources) {
+                String id = res.get("resource_id").asText();
+                // Check properties -> resource_size
+                String size = res.path("properties").path("resource_size").asText("double");
+
+                String type = size.equalsIgnoreCase("single") ? "Singles" : "Doubles";
+                System.out.println(type);
+            }
+        } else {
+            System.err.println("❌ Failed to fetch metadata: " + response.statusCode());
         }
-        return "Unknown";
     }
+
 
     public void formatAndPrintAvailability(String jsonResponse) {
         System.out.println("\n--- PADEL54 MOIRA AVAILABILITY ---");
 
         // Split by resource_id to isolate each court
         String[] courts = jsonResponse.split("\\{\"resource_id\":");
+
+        var jsonNode = mapper.readTree(jsonResponse);
+
+        for (int i = 0; i < jsonNode.size(); i++) {
+            IO.println(getCachedCourtType(jsonNode.get(i).get("resource_id").asString()));
+        }
 
         for (String court : courts) {
             if (court.trim().isEmpty() || !court.contains("slots")) continue;
@@ -171,6 +194,35 @@ public class PlaytomicAppScraper2025 {
             if (!found) System.out.println("  (No slots available)");
         }
     }
+
+    private String getCachedCourtType(String resourceId) {
+
+        String url = String.format("https://api.playtomic.io/v1/tenants/%s/resources/%s", TENANT_ID, resourceId);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("User-Agent", "iOS 26.2")
+                .GET()
+                .build();
+
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        String type = "Doubles"; // Default
+
+        IO.println(response.body());
+        if (response.statusCode() == 200) {
+            JsonNode node = mapper.readTree(response.body());
+            int size = node.path("properties").path("size").asInt();
+            if (size == 2) type = "Singles";
+        }
+
+        return type;
+    }
+
 
     private String getValueFromJson(String json, String key) {
         Pattern pattern = Pattern.compile("\"" + key + "\":\"([^\"]+)\"");
