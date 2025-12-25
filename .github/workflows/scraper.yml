@@ -38,7 +38,7 @@ jobs:
           PUB_TOPIC: ${{ secrets.PUB_TOPIC }}
         run: |
           # Run the scraper and save output to a temp file
-          ./gradlew run --quiet > current_output.txt
+          ./gradlew run > current_output.txt
           
           # 2. COMPARE DATA
           if [ -f last_schedule.txt ] && cmp -s current_output.txt last_schedule.txt; then
