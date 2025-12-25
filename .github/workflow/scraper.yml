@@ -1,0 +1,28 @@
+name: Playtomic Scraper Bot
+
+on:
+  schedule:
+    # Runs every 15 minutes (UTC)
+    - cron: '*/60 * * * *'
+  workflow_dispatch: # Allows you to run it manually from the "Actions" tab
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: Compile and Run Scraper
+        env:
+          # Pass secrets into environment variables
+          EMAIL: ${{ secrets.PLAYTOMIC_EMAIL }}
+          PASSWORD: ${{ secrets.PLAYTOMIC_PASSWORD }}
+        run: |
+          java PadelScraper
