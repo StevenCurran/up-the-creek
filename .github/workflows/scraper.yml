@@ -9,6 +9,9 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    permissions: # <--- Add this section
+      contents: read    # Required to checkout code
+      actions: write    # Required to delete caches
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,7 +64,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List all caches with our prefix, exclude the current run's key, and delete them
-          gh cache list --key "padel-data-" --limit 100 --json key,id | \
-          jq -r '.[] | select(.key != "padel-data-${{ github.run_id }}") | .id' | \
-          xargs -I {} gh cache delete {} || echo "No old caches to delete."
+          echo "Cleaning up old padel-data caches..."
+          # Get the list of IDs, filtering out the current run's cache key
+          CACHE_IDS=$(gh cache list --key "padel-data-" --limit 100 --json key,id | \
+            jq -r '.[] | select(.key != "padel-data-${{ github.run_id }}") | .id')
+          
+          if [ -z "$CACHE_IDS" ]; then
+            echo "No old caches found."
+          else
+            for id in $CACHE_IDS; do
+              echo "Deleting cache ID: $id"
+              gh cache delete "$id" || echo "Couldn't delete $id (it might already be gone)"
+            done
+          fi
