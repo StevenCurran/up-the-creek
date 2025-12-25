@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
 
 public class PlaytomicAppScraper2025 {
 
-    private static final String EMAIL = "boarder.kite@googlemail.com";
-    private static final String PASSWORD = "Flatness-Margarine-Rural-Reanalyze5";
+    private static final String EMAIL = "";
+    private static final String PASSWORD = "";
     private static final String TENANT_ID = "0e339a49-7fc6-49b0-b4b7-44165dc0a8d7";
 
     private final ObjectMapper mapper = new ObjectMapper();
