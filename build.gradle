@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'application'
 }
 
 group = 'org.stac'
@@ -10,9 +11,12 @@ repositories {
 }
 
 dependencies {
-    testImplementation platform('org.junit:junit-bom:5.10.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation("tools.jackson.core:jackson-core:3.0.3")
+    implementation("tools.jackson.core:jackson-databind:3.0.3")
+}
+
+application {
+    mainClass = 'org.stac.PadelScraper'
 }
 
 test {
