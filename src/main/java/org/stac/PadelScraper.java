@@ -26,18 +26,33 @@ public class PadelScraper {
                 .build();
     }
 
-    static void main() throws Exception {
+    public static void main(String[] args) throws Exception {
         var scraper = new PadelScraper();
-        System.out.println("Starting Padel Scraper");
-        System.out.println("Sending to " + TOPIC);
-        scraper.getAvailability("2025-12-26");
-        scraper.getAvailability("2025-12-27");
-        scraper.getAvailability("2025-12-28");
+        System.out.println("🚀 Starting Padel Scraper for Padel54 Moira");
+        System.out.println("Pushing to ntfy.sh/" + TOPIC);
+
+        StringBuilder fullReport = new StringBuilder();
+        String[] dates = {"2025-12-26", "2025-12-27", "2025-12-28"};
+
+        for (String date : dates) {
+            String tableRows = scraper.getAvailability(date);
+            if (!tableRows.isEmpty()) {
+                fullReport.append("📅 **Date: ").append(date).append("**\n");
+                fullReport.append("```\n");
+                fullReport.append("Time  | Dur | Price\n");
+                fullReport.append("------|-----|------\n");
+                fullReport.append(tableRows);
+                fullReport.append("```\n\n");
+            }
+        }
+
+        if (fullReport.length() > 0) {
+            scraper.sendPushNotification(fullReport.toString());
+        } else {
+            System.out.println("📭 No availability found for the requested dates.");
+        }
     }
 
-    /**
-     * Authenticates using the v3 Login endpoint
-     */
     public void login() throws Exception {
         String payload = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", EMAIL, PASSWORD);
 
@@ -56,42 +71,32 @@ public class PadelScraper {
             this.refreshToken = getValueFromJson(response.body(), "refresh_token");
             System.out.println("✅ Login Successful.");
         } else {
-            throw new RuntimeException("Login failed: " + response.statusCode() + " " + response.body());
+            throw new RuntimeException("Login failed: " + response.statusCode());
         }
     }
 
-    /**
-     * Refreshes the session using the Refresh Token
-     */
     public void refresh() throws Exception {
         if (refreshToken == null) {
             login();
             return;
         }
-
         String payload = "{\"refresh_token\":\"" + refreshToken + "\"}";
-
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.playtomic.io/v3/auth/token"))
                 .header("Content-Type", "application/json")
-                .header("User-Agent", "Playtomic/31542 CFNetwork/3860.300.31 Darwin/25.2.0")
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
         if (response.statusCode() == 200) {
             this.accessToken = getValueFromJson(response.body(), "access_token");
             System.out.println("🔄 Token Refreshed.");
         } else {
-            login(); // If refresh fails, do a full login
+            login();
         }
     }
 
-    /**
-     * Fetches availability for a specific date (YYYY-MM-DD)
-     */
-    public void getAvailability(String date) throws Exception {
+    public String getAvailability(String date) throws Exception {
         if (accessToken == null) login();
 
         String url = String.format("https://api.playtomic.io/v1/availability?sport_id=PADEL" +
@@ -102,7 +107,6 @@ public class PadelScraper {
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + accessToken)
                 .header("User-Agent", "iOS 26.2")
-                .header("X-Requested-With", "com.playtomic.app 6.55.1")
                 .GET()
                 .build();
 
@@ -110,47 +114,47 @@ public class PadelScraper {
 
         if (response.statusCode() == 401) {
             refresh();
-            getAvailability(date); // Retry once after refresh
+            return getAvailability(date);
         } else if (response.statusCode() == 200) {
-            System.out.println("🎾 Found Availability for " + date);
-            formatAndPrintAvailability(response.body());
-
-        } else {
-            System.out.println("❌ Search Failed: " + response.statusCode());
+            return parseSlotsForTable(response.body());
         }
+        return "";
     }
 
-    public void formatAndPrintAvailability(String jsonResponse) {
-        System.out.println("\n--- PADEL54 MOIRA AVAILABILITY ---");
+    private String parseSlotsForTable(String jsonResponse) {
+        StringBuilder rows = new StringBuilder();
+        Pattern slotPattern = Pattern.compile("\\{\"start_time\":\"(.*?)\",\"duration\":(\\d+),\"price\":\"(.*?)\"\\}");
+        Matcher matcher = slotPattern.matcher(jsonResponse);
 
-        // Split by resource_id to isolate each court
-        String[] courts = jsonResponse.split("\\{\"resource_id\":");
+        boolean found = false;
+        while (matcher.find()) {
+            String time = matcher.group(1).substring(0, 5);
+            String dur = matcher.group(2) + "m";
+            String price = matcher.group(3).replace(" GBP", "£");
 
-        for (String court : courts) {
-            if (court.trim().isEmpty() || !court.contains("slots")) continue;
+            // Alignment: %-5s (5 chars left aligned), %-3s (3 chars left aligned)
+            rows.append(String.format("%-5s | %-3s | %s\n", time, dur, price));
+            found = true;
+        }
+        return found ? rows.toString() : "";
+    }
 
-            // Extract Court ID (shorthand)
-            String courtId = court.substring(1, 6) + "...";
-            System.out.println("\nCourt [" + courtId + "]:");
+    public void sendPushNotification(String message) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://ntfy.sh/" + TOPIC))
+                    .header("Title", "Padel Availability Found")
+                    .header("Priority", "4")
+                    .header("Tags", "racquet,calendar")
+                    .header("Markdown", "yes") // Enables the monospaced table view
+                    .POST(HttpRequest.BodyPublishers.ofString(message))
+                    .build();
 
-            // Use regex to find all slot patterns: {"start_time":"HH:mm:ss","duration":X,"price":"Y"}
-            Pattern slotPattern = Pattern.compile("\\{\"start_time\":\"(.*?)\",\"duration\":(\\d+),\"price\":\"(.*?)\"\\}");
-            Matcher matcher = slotPattern.matcher(court);
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("🚀 Notification Status: " + response.statusCode());
 
-            boolean found = false;
-            while (matcher.find()) {
-                String startTime = matcher.group(1).substring(0, 5); // Just HH:mm
-                String duration = matcher.group(2);
-                String price = matcher.group(3);
-
-                System.out.printf("  🕒 %s (%s min) - %s\n", startTime, duration, price);
-                found = true;
-
-                String alert = String.format("Court available at %s for %s min (%s)", startTime, duration, price);
-                sendPushNotification(alert);
-            }
-
-            if (!found) System.out.println("  (No slots available)");
+        } catch (Exception e) {
+            System.err.println("❌ Failed to send notification: " + e.getMessage());
         }
     }
 
@@ -159,27 +163,4 @@ public class PadelScraper {
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1) : null;
     }
-
-    /**
-     * Sends a push notification to your iPhone via ntfy.sh
-     */
-    public void sendPushNotification(String message) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://ntfy.sh/" + TOPIC))
-                    .header("Title", "Padel Court Alert") // No emojis here
-                    .header("Priority", "4")             // 4 = High, 5 = Urgent
-                    .header("Tags", "racquet,star2")     // These become emojis: 🎾, 🌟
-                    .POST(HttpRequest.BodyPublishers.ofString(message))
-                    .build();
-
-            httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("🚀 Notification sent via Tags.");
-
-        } catch (Exception e) {
-            System.err.println("Failed to send notification: " + e.getMessage());
-        }
-    }
-
-
 }
