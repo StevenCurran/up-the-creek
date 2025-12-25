@@ -167,7 +167,7 @@ public class PlaytomicAppScraper2025 {
         var jsonNode = mapper.readTree(jsonResponse);
 
         for (int i = 0; i < jsonNode.size(); i++) {
-            System.out.println(getCachedCourtType(jsonNode.get(i).get("resource_id").asString()));
+            IO.println(getCachedCourtType(jsonNode.get(i).get("resource_id").asString()));
         }
 
         for (String court : courts) {
@@ -213,7 +213,7 @@ public class PlaytomicAppScraper2025 {
         }
         String type = "Doubles"; // Default
 
-        System.out.println(response.body());
+        IO.println(response.body());
         if (response.statusCode() == 200) {
             JsonNode node = mapper.readTree(response.body());
             int size = node.path("properties").path("size").asInt();
