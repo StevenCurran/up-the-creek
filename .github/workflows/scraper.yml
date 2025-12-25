@@ -25,4 +25,4 @@ jobs:
           EMAIL: ${{ secrets.PLAYTOMIC_EMAIL }}
           PASSWORD: ${{ secrets.PLAYTOMIC_PASSWORD }}
         run: |
-          java PadelScraper
+          java src/main/java/org/stac/PadelScraper.java
