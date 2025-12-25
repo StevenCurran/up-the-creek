@@ -165,15 +165,14 @@ public class PadelScraper {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://ntfy.sh/" + TOPIC))
-                    .header("Title", "Padel Court Found! 🎾")
-                    .header("Priority", "high") // Makes it bypass "Do Not Disturb" on some settings
-                    .header("Tags", "racquet,star2") // Adds emojis to the alert
+                    .header("Title", "Padel Court Alert") // No emojis here
+                    .header("Priority", "4")             // 4 = High, 5 = Urgent
+                    .header("Tags", "racquet,star2")     // These become emojis: 🎾, 🌟
                     .POST(HttpRequest.BodyPublishers.ofString(message))
                     .build();
 
-            // Use the same httpClient you defined in the constructor
             this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("🚀 Notification sent to ntfy.sh/" + TOPIC);
+            System.out.println("🚀 Notification sent via Tags.");
 
         } catch (Exception e) {
             System.err.println("Failed to send notification: " + e.getMessage());
