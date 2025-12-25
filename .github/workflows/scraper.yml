@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '*/30 * * * *' # Runs every 30 mins
   workflow_dispatch:      # Allows manual trigger
+  push:
 
 jobs:
   scrape:
@@ -18,8 +19,8 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build with Gradle
-        uses: gradle/actions@v5.0.0
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       # 1. RESTORE PREVIOUS DATA
       - name: Restore Previous Schedule
