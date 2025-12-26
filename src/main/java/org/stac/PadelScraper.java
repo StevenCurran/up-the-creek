@@ -229,7 +229,7 @@ public class PadelScraper {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://ntfy.sh/" + TOPIC))
                     .header("Title", "Padel54 Availability")
-                    .header("Priority", "4")
+                    .header("Priority", "2")
                     .header("Tags", "racquet,calendar")
                     .header("Markdown", "yes")
                     .POST(HttpRequest.BodyPublishers.ofString(message))
