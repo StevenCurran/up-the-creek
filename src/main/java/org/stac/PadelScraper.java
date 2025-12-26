@@ -10,8 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class PadelScraper {
 
@@ -90,7 +89,7 @@ public class PadelScraper {
             JsonNode resources = root.get("resources");
 
             for (JsonNode res : resources) {
-                String id = res.get("resource_id").asText();
+                String id = res.get("resource_id").toString();
                 // Check properties -> resource_size
                 String size = res.path("properties").path("resource_size").asText("double");
 
@@ -128,11 +127,11 @@ public class PadelScraper {
 
     private String processJsonAvailability(String jsonResponse) throws Exception {
         JsonNode root = mapper.readTree(jsonResponse);
-        StringBuilder doublesTable = new StringBuilder();
-        StringBuilder singlesTable = new StringBuilder();
+        List<SlotInfo> doubleSlots = new ArrayList<>();
+        List<SlotInfo> singleSlots = new ArrayList<>();
 
         for (JsonNode resource : root) {
-            String resourceId = resource.get("resource_id").asText();
+            String resourceId = resource.get("resource_id").toString();
             String type = courtTypeMap.getOrDefault(resourceId, "Doubles");
 
             // --- IGNORE SINGLES HERE ---
@@ -143,31 +142,52 @@ public class PadelScraper {
             JsonNode slots = resource.get("slots");
             if (slots != null && slots.isArray()) {
                 for (JsonNode slot : slots) {
-                    String row = formatSlotRow(slot);
+                    SlotInfo info = new SlotInfo(slot);
                     if ("Singles".equals(type)) {
-                        singlesTable.append(row);
+                        singleSlots.add(info);
                     } else {
-                        doublesTable.append(row);
+                        doubleSlots.add(info);
                     }
                 }
             }
         }
 
+        // Sort by start time
+        doubleSlots.sort(Comparator.comparing(s -> s.startTime));
+        singleSlots.sort(Comparator.comparing(s -> s.startTime));
+
         StringBuilder output = new StringBuilder();
-        if (doublesTable.length() > 0) {
-            output.append("👥 **Doubles**\n```\nTime  | Dur | Price\n").append(doublesTable).append("```\n");
+        if (!doubleSlots.isEmpty()) {
+            output.append("👥 **Doubles**\n```\nTime  | Dur | Price\n");
+            for (SlotInfo slot : doubleSlots) {
+                output.append(slot.formatRow());
+            }
+            output.append("```\n");
         }
-//        if (singlesTable.length() > 0) {
-//            output.append("👤 **Singles**\n```\nTime  | Dur | Price\n").append(singlesTable).append("```\n");
+//        if (!singleSlots.isEmpty()) {
+//            output.append("👤 **Singles**\n```\nTime  | Dur | Price\n");
+//            for (SlotInfo slot : singleSlots) {
+//                output.append(slot.formatRow());
+//            }
+//            output.append("```\n");
 //        }
         return output.toString();
     }
 
-    private String formatSlotRow(JsonNode slot) {
-        String time = slot.get("start_time").asText().substring(0, 5);
-        String dur = slot.get("duration").asText() + "m";
-        String price = slot.get("price").asText().replace(" GBP", "£");
-        return String.format("%-5s | %-3s | %s\n", time, dur, price);
+    // Helper record to store slot information
+    private record SlotInfo(String startTime, String duration, String price) {
+        SlotInfo(JsonNode slot) {
+            this(
+                    slot.get("start_time").toString(),
+                    slot.get("duration").toString() + "m",
+                    slot.get("price").toString().replace(" GBP", "£")
+            );
+        }
+
+        String formatRow() {
+            String time = startTime.substring(0, 5);
+            return String.format("%-5s | %-3s | %s\n", time, duration, price);
+        }
     }
 
     // --- Auth Logic ---
@@ -184,8 +204,8 @@ public class PadelScraper {
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 200) {
             JsonNode node = mapper.readTree(response.body());
-            this.accessToken = node.get("access_token").asText();
-            this.refreshToken = node.get("refresh_token").asText();
+            this.accessToken = node.get("access_token").toString();
+            this.refreshToken = node.get("refresh_token").toString();
             System.out.println("🔑 Login successful.");
         } else {
             throw new RuntimeException("Login failed: " + response.statusCode());
@@ -193,7 +213,10 @@ public class PadelScraper {
     }
 
     public void refresh() throws Exception {
-        if (refreshToken == null) { login(); return; }
+        if (refreshToken == null) {
+            login();
+            return;
+        }
         String payload = "{\"refresh_token\":\"" + refreshToken + "\"}";
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.playtomic.io/v3/auth/token"))
@@ -203,7 +226,7 @@ public class PadelScraper {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 200) {
-            this.accessToken = mapper.readTree(response.body()).get("access_token").asText();
+            this.accessToken = mapper.readTree(response.body()).get("access_token").toString();
         } else {
             login();
         }
