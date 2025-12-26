@@ -89,7 +89,7 @@ public class PadelScraper {
             JsonNode resources = root.get("resources");
 
             for (JsonNode res : resources) {
-                String id = res.get("resource_id").toString();
+                String id = res.get("resource_id").asText();
                 // Check properties -> resource_size
                 String size = res.path("properties").path("resource_size").asText("double");
 
@@ -127,14 +127,16 @@ public class PadelScraper {
 
     private String processJsonAvailability(String jsonResponse) throws Exception {
         JsonNode root = mapper.readTree(jsonResponse);
-        List<SlotInfo> doubleSlots = new ArrayList<>();
-        List<SlotInfo> singleSlots = new ArrayList<>();
+
+        // Use Lists instead of StringBuilder to allow sorting
+        List<String> doublesSlots = new ArrayList<>();
+        List<String> singlesSlots = new ArrayList<>();
 
         for (JsonNode resource : root) {
-            String resourceId = resource.get("resource_id").toString();
+            String resourceId = resource.get("resource_id").asText();
             String type = courtTypeMap.getOrDefault(resourceId, "Doubles");
 
-            // --- IGNORE SINGLES HERE ---
+            // Skip Singles as per your current logic
             if ("Singles".equals(type)) {
                 continue;
             }
@@ -142,52 +144,45 @@ public class PadelScraper {
             JsonNode slots = resource.get("slots");
             if (slots != null && slots.isArray()) {
                 for (JsonNode slot : slots) {
-                    SlotInfo info = new SlotInfo(slot);
+                    String row = formatSlotRow(slot);
                     if ("Singles".equals(type)) {
-                        singleSlots.add(info);
+                        singlesSlots.add(row);
                     } else {
-                        doubleSlots.add(info);
+                        doublesSlots.add(row);
                     }
                 }
             }
         }
 
-        // Sort by start time
-        doubleSlots.sort(Comparator.comparing(s -> s.startTime));
-        singleSlots.sort(Comparator.comparing(s -> s.startTime));
+        // Sort the lists alphabetically/chronologically (HH:mm format allows this)
+        Collections.sort(doublesSlots);
+        Collections.sort(singlesSlots);
 
         StringBuilder output = new StringBuilder();
-        if (!doubleSlots.isEmpty()) {
+
+        if (!doublesSlots.isEmpty()) {
             output.append("👥 **Doubles**\n```\nTime  | Dur | Price\n");
-            for (SlotInfo slot : doubleSlots) {
-                output.append(slot.formatRow());
-            }
+            doublesSlots.forEach(output::append);
             output.append("```\n");
         }
-//        if (!singleSlots.isEmpty()) {
-//            output.append("👤 **Singles**\n```\nTime  | Dur | Price\n");
-//            for (SlotInfo slot : singleSlots) {
-//                output.append(slot.formatRow());
-//            }
-//            output.append("```\n");
-//        }
+
+        // Optional: Keep singles commented out or remove as needed
+    /*
+    if (!singlesSlots.isEmpty()) {
+        output.append("👤 **Singles**\n```\nTime  | Dur | Price\n");
+        singlesSlots.forEach(output::append);
+        output.append("```\n");
+    }
+    */
+
         return output.toString();
     }
 
-    // Helper record to store slot information
-    private record SlotInfo(String startTime, String duration, String price) {
-        SlotInfo(JsonNode slot) {
-            this(
-                    slot.get("start_time").toString(),
-                    slot.get("duration").toString() + "m",
-                    slot.get("price").toString().replace(" GBP", "£")
-            );
-        }
-
-        String formatRow() {
-            String time = startTime.substring(0, 5);
-            return String.format("%-5s | %-3s | %s\n", time, duration, price);
-        }
+    private String formatSlotRow(JsonNode slot) {
+        String time = slot.get("start_time").asText().substring(0, 5);
+        String dur = slot.get("duration").asText() + "m";
+        String price = slot.get("price").asText().replace(" GBP", "£");
+        return String.format("%-5s | %-3s | %s\n", time, dur, price);
     }
 
     // --- Auth Logic ---
@@ -204,8 +199,8 @@ public class PadelScraper {
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 200) {
             JsonNode node = mapper.readTree(response.body());
-            this.accessToken = node.get("access_token").toString();
-            this.refreshToken = node.get("refresh_token").toString();
+            this.accessToken = node.get("access_token").asText();
+            this.refreshToken = node.get("refresh_token").asText();
             System.out.println("🔑 Login successful.");
         } else {
             throw new RuntimeException("Login failed: " + response.statusCode());
@@ -213,10 +208,7 @@ public class PadelScraper {
     }
 
     public void refresh() throws Exception {
-        if (refreshToken == null) {
-            login();
-            return;
-        }
+        if (refreshToken == null) { login(); return; }
         String payload = "{\"refresh_token\":\"" + refreshToken + "\"}";
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.playtomic.io/v3/auth/token"))
@@ -226,7 +218,7 @@ public class PadelScraper {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 200) {
-            this.accessToken = mapper.readTree(response.body()).get("access_token").toString();
+            this.accessToken = mapper.readTree(response.body()).get("access_token").asText();
         } else {
             login();
         }
