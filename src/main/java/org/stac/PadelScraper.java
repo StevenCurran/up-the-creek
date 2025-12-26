@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,7 +36,7 @@ public class PadelScraper {
                 .build();
     }
 
-    public static void main(String[] args) throws Exception {
+    static void main() throws Exception {
         var scraper = new PadelScraper();
         System.out.println("🚀 Starting Padel Scraper for Padel54");
 
@@ -43,11 +44,17 @@ public class PadelScraper {
         scraper.login();
         scraper.fetchCourtMetadata();
 
-        StringBuilder fullReport = new StringBuilder();
-        String[] dates = {"2025-12-26", "2025-12-27", "2025-12-28"};
+        var fullReport = new StringBuilder();
 
-        for (String date : dates) {
-            String reportForDate = scraper.getAvailabilityReport(date);
+        var today = LocalDate.now();
+        String[] dates = {
+                today.toString(),
+                today.plusDays(1).toString(),
+                today.plusDays(2).toString()
+        };
+
+        for (var date : dates) {
+            var reportForDate = scraper.getAvailabilityReport(date);
             if (!reportForDate.isEmpty()) {
                 fullReport.append("📅 **Date: ").append(date).append("**\n")
                         .append(reportForDate).append("\n");
